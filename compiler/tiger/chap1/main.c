@@ -9,7 +9,6 @@ int maxargs(A_stm stm);
 int maxargs_exp(A_exp exp);
 int maxargs_explist(A_expList exps);
 
-Table_ interpStm(A_stm s, Table_ t);
 
 /* testing table*/
 void test_table1();
@@ -17,8 +16,10 @@ void test_table1();
 int main() 
 {
     printf("%d\n", maxargs(prog()));
-
     test_table1();
+
+    interp(prog());
+
     return 0;
 }
 

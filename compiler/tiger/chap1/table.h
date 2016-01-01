@@ -2,6 +2,7 @@
 #define TABLE_H
 
 #include "util.h"
+#include "slp.h"
 
 typedef struct table* Table_;
 struct table {
@@ -11,6 +12,7 @@ struct table {
 };
 
 Table_ Table(string id, int value, Table_ tail);
+/* constructor */
 
 Table_ update(Table_ table, string id, int value);
 /* update the value of id
@@ -22,6 +24,12 @@ bool lookup(Table_ table, string key, int* value);
  * return true. return false otherwise*/ 
 
 void print(Table_ table);
+/* print table to stdout
+ * for testing purposes */
+
+void interp(A_stm stm);
+/* evaluate the statement */
+
 
 
 #endif
