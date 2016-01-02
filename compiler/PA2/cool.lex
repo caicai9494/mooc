@@ -1,4 +1,10 @@
 /*
+ * Disclaimer:
+ * This solution is a fork on dychen's submission
+ * https://github.com/dychen/compilers
+ */
+
+/*
  *  The scanner definition for COOL.
  */
 
@@ -40,7 +46,12 @@ extern int verbose_flag;
 extern YYSTYPE cool_yylval;
 
 bool safe_add_char(char c);
-
+/* 
+ * check buffer overflow 
+ * before adding
+ * return false on failure and set the error msg
+ * return true otherwise 
+ */
 bool safe_add_char(char c) 
 {
     if (string_buf_ptr >= string_buf + MAX_STR_CONST) {
@@ -219,21 +230,41 @@ LET_STMT        (?i:let_stmt)
         return ERROR;
     }
 }
-<STR_BLOCK>\\t *string_buf_ptr++ = '\t';
-<STR_BLOCK>\\n *string_buf_ptr++ = '\n';
-<STR_BLOCK>\\f *string_buf_ptr++ = '\f';
-<STR_BLOCK>\\\0 { BEGIN STR_NUL_ERROR; }
-<STR_BLOCK>\\(.|\n) { *string_buf_ptr++ = yytext[1]; }
-<STR_BLOCK>[^"\\\0\n]* {
-    if (string_buf_ptr + sizeof(char) * strlen(yytext) < string_buf + MAX_STR_CONST) {
-        strcpy(string_buf_ptr, yytext);
+<STR_BLOCK>\\t { 
+    if (!safe_add_char('\t')) {
+        cool_yylval.error_msg = "String constant too long";
+        return ERROR;
     }
-    string_buf_ptr += sizeof(char) * strlen(yytext);
+}
+<STR_BLOCK>\\n { 
+    if (!safe_add_char('\n')) {
+        cool_yylval.error_msg = "String constant too long";
+        return ERROR;
+    }
+}
+<STR_BLOCK>\\f { 
+    if (!safe_add_char('\f')) {
+        cool_yylval.error_msg = "String constant too long";
+        return ERROR;
+    }
+}
+<STR_BLOCK>\\\0 { BEGIN STR_NUL_ERROR; }
+<STR_BLOCK>\\(.|\n) { 
+    if (!safe_add_char(yytext[1])) {
+        cool_yylval.error_msg = "String constant too long";
+        return ERROR;
+    }
 }
 <STR_BLOCK>\n {
     cool_yylval.error_msg = "Unterminated string constant";
     BEGIN 0;
     return (ERROR);
+}
+<STR_BLOCK>[^"\0] {
+    if (!safe_add_char(yytext[0])) {
+        cool_yylval.error_msg = "String constant too long";
+        return ERROR;
+    }
 }
 <STR_BLOCK><<EOF>> {
     cool_yylval.error_msg = "EOF in string constant";
