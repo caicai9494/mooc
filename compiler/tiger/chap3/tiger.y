@@ -7,7 +7,7 @@ int yylex(void); /* function prototype */
 
 void yyerror(char *s)
 {
- EM_error(EM_tokPos, "%s", s);
+    EM_error(EM_tokPos, "%s", s);
 }
 %}
 

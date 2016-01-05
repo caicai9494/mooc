@@ -5,7 +5,8 @@
 
 extern int yyparse(void);
 
-void parse(string fname) {
+void parse(string fname) 
+{
     EM_reset(fname);
     if (yyparse() == 0) /* parsing worked */
         fprintf(stderr, "Parsing successful!\n");
@@ -13,7 +14,8 @@ void parse(string fname) {
         fprintf(stderr, "Parsing failed\n");
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) 
+{
 
     FILE* yyin = {stdin}; 
     FILE* yyout = {stdout};
