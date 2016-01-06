@@ -34,9 +34,51 @@ void yyerror(char *s)
 
 %%
 
-program:	exp
+program: stmlist
 
-exp:   ID
+stmlist: stm
+       | stm SEMICOLON stmlist       
+
+stm: exp
+
+exp: ID
+   | STRING
+   | INT
+   | NIL
+   | ARRAY LBRACK exp RBRACK
+   | MINUS exp
+   | exp PLUS exp
+   | exp MINUS exp
+   | exp TIMES exp
+   | exp DIVIDE exp
+   | exp EQ exp
+   | exp NEQ exp
+   | exp LT exp
+   | exp LE exp
+   | exp GT exp
+   | exp GE exp
+   | exp AND exp
+   | exp OR exp
+   | exp ASSIGN exp
+   | LPAREN expseq RPAREN
+   | ID LPAREN explist RPAREN 
+   | ID LBRACE declarelist RBRACE
+   | ID LBRACK exp RBRACK OF exp
+   | IF exp THEN exp  
+   | IF exp THEN exp ELSE exp 
+   | WHILE exp DO exp
+   | FOR ID ASSIGN exp TO exp DO exp 
+   | BREAK
+   | LET declarelist IN expseq END
+
+expseq: exp
+      | exp SEMICOLON expseq
+
+explist: exp
+       | exp COLON explist
+
+declarelist: ID ASSIGN exp
+	   | ID ASSIGN exp SEMICOLON declarelist
 
 
 
