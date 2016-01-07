@@ -39,6 +39,7 @@ void yyerror(char *s)
 %left PLUS MINUS
 %left TIMES DIVIDE
 %left NEG
+%right OF ELSE DO THEN
 
 %%
 
@@ -66,17 +67,22 @@ exp: lvalue
    | exp GE exp
    | exp AND exp
    | exp OR exp
-   | VAR lvalue ASSIGN exp
    | LPAREN expr_seq RPAREN
-   | ID LPAREN expr_list RPAREN 
-   | ID LBRACE field_list RBRACE
-   | ID LBRACK exp RBRACK OF exp
-   | IF exp THEN exp  
+   | function 
+   | array
+   | record
+   | IF exp THEN exp /* shift if in conflict */
    | IF exp THEN exp ELSE exp 
    | WHILE exp DO exp
    | FOR ID ASSIGN exp TO exp DO exp 
    | BREAK
    | LET declare_list IN expr_seq END
+
+function: ID LPAREN expr_list RPAREN
+
+array: ID LBRACE field_list RBRACE
+
+record: ID LBRACK exp RBRACK OF exp 
 
 lvalue: ID
       | lvalue DOT ID
@@ -95,7 +101,7 @@ field_list: /* empty */
 	 | TYPE ID EQ exp SEMICOLON field_list
 
 declare_list: declare
-	       | declare declare_list
+	    | declare declare_list
 
 declare: type_declare
        | variable_declare
