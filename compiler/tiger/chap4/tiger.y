@@ -102,7 +102,7 @@ exp: lvalue {$$=A_VarExp(EM_tokPos,$1);}
    | LPAREN exp_seq RPAREN {$$=A_SeqExp(EM_tokPos, $2);}
    | IF exp THEN exp {$$=A_IfExp(EM_tokPos, $2, $4, NULL);}
    | IF exp THEN exp ELSE exp {$$=A_IfExp(EM_tokPos, $2, $4, $6);}
-   | WHILE LPAREN exp RPAREN DO exp {$$=A_WhileExp(EM_tokPos, $3, $6);}
+   | WHILE exp DO exp {$$=A_WhileExp(EM_tokPos, $2, $4);}
    | FOR ID ASSIGN exp TO exp DO exp {$$=A_ForExp(EM_tokPos, S_Symbol($2), $4, $6, $8);} 
    | BREAK {$$=A_BreakExp(EM_tokPos);}
    | let
@@ -150,8 +150,8 @@ field_list: /* empty */ {$$=NULL;}
         | field {$$=A_FieldList($1, NULL);} 
         | field COMMA field_list {$$=A_FieldList($1, $3);}
 
-fundec: FUNCTION ID LPAREN field_list RPAREN EQ LPAREN exp_seq RPAREN {$$=A_Fundec(EM_tokPos, S_Symbol($2), $4, NULL, A_SeqExp(EM_tokPos, $8));}
-      | FUNCTION ID LPAREN field_list RPAREN COLON ID EQ LPAREN exp_seq RPAREN {$$=A_Fundec(EM_tokPos, S_Symbol($2), $4, S_Symbol($7), A_SeqExp(EM_tokPos, $10));}
+fundec: FUNCTION ID LPAREN field_list RPAREN EQ exp_seq {$$=A_Fundec(EM_tokPos, S_Symbol($2), $4, NULL, A_SeqExp(EM_tokPos, $7));}
+      | FUNCTION ID LPAREN field_list RPAREN COLON ID EQ exp_seq {$$=A_Fundec(EM_tokPos, S_Symbol($2), $4, S_Symbol($7), A_SeqExp(EM_tokPos, $9));}
 
 fundec_list: fundec {$$=A_FundecList($1, NULL);}
 	   | fundec fundec_list {$$=A_FundecList($1, $2);}
