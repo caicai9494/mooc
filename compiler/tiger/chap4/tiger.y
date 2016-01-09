@@ -108,6 +108,7 @@ exp: lvalue {$$=A_VarExp(EM_tokPos,$1);}
    | LET dec_list IN exp_seq END {$$=A_LetExp(EM_tokPos, $2, A_SeqExp(EM_tokPos, $4));}
 
 lvalue: ID {$$=A_SimpleVar(EM_tokPos, S_Symbol($1));}
+      | ID LBRACK exp RBRACK {$$=A_SubscriptVar(EM_tokPos, A_SimpleVar(EM_tokPos, S_Symbol($1)), $3);}
       | lvalue LBRACK exp RBRACK {$$=A_SubscriptVar(EM_tokPos, $1, $3);}
       | lvalue DOT ID {$$=A_FieldVar(EM_tokPos, $1, S_Symbol($3));}
 
