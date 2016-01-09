@@ -49,7 +49,7 @@ void yyerror(char *s)
   FUNCTION VAR TYPE 
 
 %type <var> lvalue
-%type <exp> exp program function array record
+%type <exp> exp program function array record let
 %type <explist> exp_seq exp_list 
 %type <dec> dec 
 %type <declist> dec_list
@@ -105,7 +105,10 @@ exp: lvalue {$$=A_VarExp(EM_tokPos,$1);}
    | WHILE LPAREN exp RPAREN DO exp {$$=A_WhileExp(EM_tokPos, $3, $6);}
    | FOR ID ASSIGN exp TO exp DO exp {$$=A_ForExp(EM_tokPos, S_Symbol($2), $4, $6, $8);} 
    | BREAK {$$=A_BreakExp(EM_tokPos);}
-   | LET dec_list IN exp_seq END {$$=A_LetExp(EM_tokPos, $2, A_SeqExp(EM_tokPos, $4));}
+   | let
+
+let: LET dec_list IN exp_seq END {$$=A_LetExp(EM_tokPos, $2, A_SeqExp(EM_tokPos, $4));}
+   | LET IN exp_seq END {$$=A_LetExp(EM_tokPos, NULL, A_SeqExp(EM_tokPos, $3));}
 
 lvalue: ID {$$=A_SimpleVar(EM_tokPos, S_Symbol($1));}
       | ID LBRACK exp RBRACK {$$=A_SubscriptVar(EM_tokPos, A_SimpleVar(EM_tokPos, S_Symbol($1)), $3);}
@@ -117,13 +120,14 @@ record: ID LBRACE efield_list RBRACE {$$=A_RecordExp(EM_tokPos, S_Symbol($1), $3
 array: ID LBRACK exp RBRACK OF exp {$$=A_ArrayExp(EM_tokPos, S_Symbol($1),$3, $6);}
 
 function: ID LPAREN exp_list RPAREN {$$=A_CallExp(EM_tokPos, S_Symbol($1), $3);}
+        | ID LPAREN RPAREN {$$=A_CallExp(EM_tokPos, S_Symbol($1), NULL);}
 
-exp_seq: /* empty */ {$$=A_ExpList(NULL, NULL);}
+exp_seq: /* empty */ {$$=NULL;}
        | exp {$$=A_ExpList($1, NULL);}
        | exp SEMICOLON exp_seq {$$=A_ExpList($1, $3);}
 
-exp_list: /* empty */ {$$=A_ExpList(NULL, NULL);}
-        | exp {$$=A_ExpList($1, NULL);}
+exp_list: /* empty */ {$$=NULL;}
+	| exp {$$=A_ExpList($1, NULL);}
         | exp COMMA exp_list {$$=A_ExpList($1, $3);}
 
 dec: fundec_list {$$=A_FunctionDec(EM_tokPos, $1);}
@@ -142,13 +146,12 @@ efield_list: /* empty */ {$$=A_EfieldList(NULL, NULL);}
 
 field: ID COLON ID {$$=A_Field(EM_tokPos, S_Symbol($1), S_Symbol($3));} 
 
-field_list: /* empty */ {$$=A_FieldList(NULL, NULL);}
+field_list: /* empty */ {$$=NULL;}
         | field {$$=A_FieldList($1, NULL);} 
         | field COMMA field_list {$$=A_FieldList($1, $3);}
 
 fundec: FUNCTION ID LPAREN field_list RPAREN EQ LPAREN exp_seq RPAREN {$$=A_Fundec(EM_tokPos, S_Symbol($2), $4, NULL, A_SeqExp(EM_tokPos, $8));}
-      | FUNCTION ID LPAREN field_list RPAREN COLON ID EQ LPAREN exp_seq
-RPAREN {$$=A_Fundec(EM_tokPos, S_Symbol($2), $4, S_Symbol($7), A_SeqExp(EM_tokPos, $10));}
+      | FUNCTION ID LPAREN field_list RPAREN COLON ID EQ LPAREN exp_seq RPAREN {$$=A_Fundec(EM_tokPos, S_Symbol($2), $4, S_Symbol($7), A_SeqExp(EM_tokPos, $10));}
 
 fundec_list: fundec {$$=A_FundecList($1, NULL);}
 	   | fundec fundec_list {$$=A_FundecList($1, $2);}
