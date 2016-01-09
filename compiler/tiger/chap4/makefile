@@ -1,11 +1,14 @@
-a.out: parsetest.o absyn.o parse.o y.tab.o lex.yy.o errormsg.o util.o symbol.o table.o
-	cc -g parsetest.o y.tab.o lex.yy.o errormsg.o util.o absyn.o parse.o symbol.o table.o
+a.out: parsetest.o absyn.o parse.o y.tab.o lex.yy.o errormsg.o util.o symbol.o table.o prabsyn.o
+	cc -g parsetest.o y.tab.o lex.yy.o errormsg.o util.o absyn.o parse.o symbol.o table.o prabsyn.o
 
 parsetest.o: parsetest.c errormsg.h util.h absyn.h
 	cc -g -c parsetest.c
 
 parse.o: parse.c parse.h absyn.h
 	cc -g -c parse.c
+
+prabsyn.o: prabsyn.c prabsyn.h
+	cc -g -c prabsyn.c
 
 absyn.o: absyn.c absyn.h
 	cc -g -c absyn.c
@@ -40,4 +43,4 @@ util.o: util.c util.h
 
 
 clean: 
-	rm -f a.out *.o #parsetest.o lex.yy.o errormsg.o y.tab.c y.tab.h y.tab.o absyn.o y.output
+	rm -f a.out *.o y.output #y.tab.c y.tab.h y.tab.o absyn.o y.output 
