@@ -7,7 +7,6 @@
 
 #include <stdio.h>
 #include "util.h"
-#include "symbol.h"
 #include "types.h"
 
 static struct Ty_ty_ tynil = {Ty_nil};

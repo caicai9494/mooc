@@ -1,6 +1,8 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+#include "symbol.h"
+
 /*
  * types.h -
  *
