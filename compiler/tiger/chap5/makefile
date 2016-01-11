@@ -1,10 +1,11 @@
 parser: parsetest.o absyn.o parse.o y.tab.o lex.yy.o \
         errormsg.o util.o symbol.o table.o prabsyn.o \
-	enventry.o types.o
+	enventry.o types.o semant.o
 	cc -o parser -g \
 	    parsetest.o y.tab.o lex.yy.o \
-	    errormsg.o util.o absyn.o parse.o\
-	    symbol.o table.o prabsyn.o enventry.o types.o
+	    errormsg.o util.o absyn.o parse.o \
+	    symbol.o table.o prabsyn.o enventry.o types.o \
+	    semant.o
 
 parsetest.o: parsetest.c errormsg.h util.h absyn.h
 	cc -g -c parsetest.c
@@ -17,6 +18,9 @@ prabsyn.o: prabsyn.c prabsyn.h
 
 absyn.o: absyn.c absyn.h
 	cc -g -c absyn.c
+
+semant.o: semant.c
+	cc -g -c semant.c
 
 enventry.o: enventry.c
 	cc -g -c enventry.c

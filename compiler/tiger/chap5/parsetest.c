@@ -3,22 +3,24 @@
 #include "parse.h"
 #include "prabsyn.h"
 #include "enventry.h"
+#include "semant.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 
-#define TEST
+//#define TEST
 
 void test_enventry_assert_print(string symbol, int line);
 void test_enventry();
+void test_transvar();
 
 int main(int argc, char** argv) 
 {
 #ifdef TEST
 
-    test_enventry();
-
+    //test_enventry();
+    test_transvar();
     return 0;
 
 #else
@@ -27,7 +29,13 @@ int main(int argc, char** argv)
         fprintf(stderr, "usage: a.out filename\n");
         exit(1);
     }
-    pr_exp(stdout, parse(argv[1]), 4);
+    A_exp exp = parse(argv[1]);
+    pr_exp(stdout, exp, 4);
+
+    S_table type_table = E_base_tenv();
+    S_table val_table = E_base_venv();
+    transExp(val_table, type_table, exp);
+
     putchar('\n');
     return 0;
 
@@ -79,3 +87,20 @@ void test_enventry()
     test_enventry_assert_print("exit", __LINE__);
 }
 
+void test_transvar()
+{
+    printf("test transvar at line %d\n", __LINE__);
+
+    S_table type_table = E_base_tenv();
+    S_table val_table = E_base_venv();
+
+    /* a isn't in the base environment initially */
+    Tr_expty expty = transVar(val_table, type_table, A_SimpleVar(0, S_Symbol("a")));
+    Ty_print(expty->ty); putchar('\n');
+
+    /* a is in the base environment now */
+    S_enter(val_table, S_Symbol("a"), E_VarEntry(Ty_Int()));
+    expty = transVar(val_table, type_table, A_SimpleVar(0, S_Symbol("a")));
+    Ty_print(expty->ty); putchar('\n');
+
+}

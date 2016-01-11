@@ -9,6 +9,8 @@ typedef char bool;
 
 #define TRUE 1
 #define FALSE 0
+#define DBG printf("\n debug %s %d\n", __FILE__, __LINE__)
+
 
 void* checked_malloc(int);
 string String(char*);
