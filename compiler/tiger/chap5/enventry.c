@@ -25,8 +25,8 @@ S_table E_base_tenv(void)
 {
     if (NULL == base_tenv) {
 	base_tenv = S_empty();
-	S_enter(base_tenv, S_Symbol("int"), Ty_Int());
-	S_enter(base_tenv, S_Symbol("string"), Ty_String());
+	S_enter(base_tenv, S_Symbol("int"), E_VarEntry(Ty_Int()));
+	S_enter(base_tenv, S_Symbol("string"), E_VarEntry(Ty_String()));
     }
 
     return base_tenv;

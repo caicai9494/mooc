@@ -357,21 +357,59 @@ static void transTypeDec(S_table venv, S_table tenv, A_dec d)
     A_nametyList nlist;
     for (nlist = d->u.type; nlist; nlist = nlist->tail) {
 	S_enter(tenv, nlist->head->name,
-		transTy(tenv, nlist->head->ty));
+		E_VarEntry(transTy(tenv, nlist->head->ty)));
     }
 }
 
 /* type checkers */
 static Ty_ty transNameTy(S_table tenv, A_ty t) 
 {
+    assert(A_nameTy == t->kind);
+
+    E_enventry x = S_look(tenv, t->u.name);
+    if (x && E_varEntry == x->kind) {
+	return x->u.var.ty;
+    } else {
+	EM_error(t->pos, "undefined type %s\n", 
+		 S_name(t->u.name));
+	return Ty_Void();
+    }
 }
 
 static Ty_ty transRecordTy(S_table tenv, A_ty t) 
 {
+    assert(A_recordTy == t->kind);
+
+    A_fieldList field;
+    Ty_fieldList flist = NULL;
+    for (field = t->u.record; field; field = field->tail) {
+	if (field->head->escape) {
+
+	    E_enventry x = S_look(tenv, field->head->typ);
+	    if (x && E_varEntry == x->kind) {
+		flist = Ty_FieldList(Ty_Field(field->head->name, x->u.var.ty), flist);
+	    } else {
+		EM_error(t->pos, "undefined record type %s\n", 
+			 S_name(field->head->typ));
+	    }
+	    
+	}
+    }
+    return Ty_Record(flist);
 }
 
 static Ty_ty transArrayTy(S_table tenv, A_ty t) 
 {
+    assert(A_arrayTy == t->kind);
+
+    E_enventry x = S_look(tenv, t->u.array);
+    if (x && E_varEntry == x->kind) {
+	return Ty_Array(x->u.var.ty);
+    } else {
+	EM_error(t->pos, "undefined array type %s\n", 
+		 S_name(t->u.name));
+	return Ty_Void();
+    }
 }
 
 /* end static functions */
