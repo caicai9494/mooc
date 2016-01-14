@@ -1,12 +1,14 @@
 #include "semant.h"
 #include "enventry.h"
 #include "errormsg.h"
+#include "util.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 
 
 /* begin static functions declarations */
+static int cmpTy(Ty_ty lhs, Ty_ty rhs); 
 
 static Ty_ty Ty_actualTy(Ty_ty ty);
 /* for nametype, find the actual underlying type */
@@ -167,10 +169,19 @@ static Tr_expty transFieldVar(S_table venv, S_table tenv, A_var v)
     /*
     E_enventry x = S_look(venv, v->u.field.sym);
     if (x && E_varEntry == x->kind) {
+	Ty_ty typ = x->u.var.ty;
+	assert(Ty_record == typ->kind);
+
+	Ty_fieldList field;
+	for (field = typ->u.record; field; field = field -> tail) {
+
+	    if (v->u.field.var == field->head->name) {
+		return Tr_ExpTy(NULL, Ty_Field(field->head->name, field->head->ty));
+	    }
+	}
 	Tr_expty list = transVar(venv, tenv, v->u.field.var);
-	return Tr_ExpTy(NULL, Ty_Record());
     } else {
-	EM_error(v->pos, "undefined field variable %s\n", 
+	EM_error(v->pos, "undefined record variable %s\n", 
 		 S_name(v->u.field.sym));
 	return Tr_ExpTy(NULL, Ty_Int());
     }
@@ -183,6 +194,7 @@ static Tr_expty transSubscriptVar(S_table venv, S_table tenv, A_var v)
 
     Tr_expty lhs_var = transVar(venv, tenv, v->u.subscript.var);
     Tr_expty rhs_exp = transExp(venv, tenv, v->u.subscript.exp);
+
     return Tr_ExpTy(lhs_var->ty, rhs_exp->exp);
 }
 
@@ -262,21 +274,19 @@ static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 static Tr_expty transSeqExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_seqExp == e->kind);
-    assert(NULL != e->u.seq);
 
     A_expList seq = e->u.seq;
-    Tr_expty expty = NULL;
-    for (; seq->tail != NULL; seq = seq->tail) {
-	if (NULL == seq->head) {
-	    return Tr_ExpTy(NULL, Ty_Void());
-	}
-	expty = transExp(venv, tenv, seq->head);
-    }	
-    if (NULL != expty) {
-	return Tr_ExpTy(NULL, expty->ty);
-    } else {
+    if (NULL == seq) {
 	return Tr_ExpTy(NULL, Ty_Void());
     }
+
+    Tr_expty expty = NULL;
+    for (; seq; seq = seq->tail) {
+	expty = transExp(venv, tenv, seq->head);
+	if (NULL == seq->tail) {
+	    return expty;
+	}
+    }	
 }
 
 static Tr_expty transAssignExp(S_table venv, S_table tenv, A_exp e)
@@ -336,6 +346,32 @@ static Tr_expty transLetExp(S_table venv, S_table tenv, A_exp e)
 static Tr_expty transArrayExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_arrayExp == e->kind);
+
+    E_enventry x = S_look(tenv, e->u.array.typ);
+    if (x && E_varEntry == x->kind) {
+	Tr_expty size = transExp(venv, tenv, e->u.array.size);
+	if (Ty_int != size->ty->kind) {
+	    EM_error(e->pos, "array %s's size is not int\n", 
+		     S_name(e->u.array.typ));
+
+	    return Tr_ExpTy(NULL, Ty_Int());
+	}
+
+	Tr_expty init = transExp(venv, tenv, e->u.array.init);
+	if (0 != cmpTy(x->u.var.ty->u.array, init->ty)) {
+	    EM_error(e->pos, "array 's type is not consistent\n", 
+		     S_name(e->u.array.typ));
+
+	    return Tr_ExpTy(NULL, Ty_Int());
+	}
+
+	return Tr_ExpTy(NULL, Ty_Array(x->u.var.ty));
+
+    } else {
+	EM_error(e->pos, "undefined array type %s\n", 
+		 S_name(e->u.array.typ));
+	return Tr_ExpTy(NULL, Ty_Int());
+    }
 }
 
 /* declaration checkers */
@@ -343,13 +379,27 @@ static void transFunctionDec(S_table venv, S_table tenv, A_dec d)
 {
     assert(A_functionDec == d->kind);
 }
+
 static void transVarDec(S_table venv, S_table tenv, A_dec d)
 {
     assert(A_varDec == d->kind);
 
     Tr_expty exp = transExp(venv, tenv, d->u.var.init);
-    S_enter(venv, d->u.var.var, E_VarEntry(exp->ty));
+
+    E_enventry x = S_look(tenv, d->u.var.typ);
+    if (x && E_varEntry == x->kind) {
+	if (0 == cmpTy(x->u.var.ty, exp->ty)) {   
+	    S_enter(venv, d->u.var.var, E_VarEntry(exp->ty));
+	} else {
+	    EM_error(d->pos, "types mismatch %s\n", 
+		     S_name(d->u.var.typ));
+	}
+    } else {
+	EM_error(d->pos, "undefined type %s\n", 
+		 S_name(d->u.var.typ));
+    }
 }
+
 static void transTypeDec(S_table venv, S_table tenv, A_dec d) 
 {
     assert(A_typeDec == d->kind);
@@ -413,6 +463,26 @@ static Ty_ty transArrayTy(S_table tenv, A_ty t)
 }
 
 /* end static functions */
+
+static int cmpTy(Ty_ty lhs, Ty_ty rhs) 
+{
+    assert(lhs);
+    assert(rhs);
+
+    if (lhs->kind != rhs->kind) {
+	return -1;
+    } 
+
+    switch (lhs->kind) {
+	case Ty_array:
+	case Ty_record:
+	    return lhs == rhs;
+	case Ty_name:
+	    return cmpTy(Ty_actualTy(lhs), Ty_actualTy(rhs));
+	default:
+	    return 0;
+    }
+}
 
 #ifdef TEST
 void test_Ty_actualTy()

@@ -113,7 +113,7 @@ let: LET dec_list IN exp_seq END {$$=A_LetExp(EM_tokPos, $2, A_SeqExp(EM_tokPos,
 lvalue: ID {$$=A_SimpleVar(EM_tokPos, S_Symbol($1));}
       | ID LBRACK exp RBRACK {$$=A_SubscriptVar(EM_tokPos, A_SimpleVar(EM_tokPos, S_Symbol($1)), $3);}
       | lvalue LBRACK exp RBRACK {$$=A_SubscriptVar(EM_tokPos, $1, $3);}
-      | lvalue DOT ID {$$=A_FieldVar(EM_tokPos, $1, S_Symbol($3));}
+      | ID DOT lvalue {$$=A_FieldVar(EM_tokPos, $3, S_Symbol($1));}
 
 record: ID LBRACE efield_list RBRACE {$$=A_RecordExp(EM_tokPos, S_Symbol($1), $3);}
 
