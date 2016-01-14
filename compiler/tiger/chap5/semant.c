@@ -250,14 +250,30 @@ static Tr_expty transCallExp(S_table venv, S_table tenv, A_exp e)
 
     E_enventry x = S_look(venv, e->u.call.func);
     if (x && E_funEntry == x->kind) {
-	return Tr_ExpTy(NULL, x->u.fun.result);
 
-	/* check args
+	Ty_tyList formals = x->u.fun.formals;
+
+	/* check args */
+	Tr_expty expr = NULL;
 	A_expList args = e->u.call.args;
-	for(; args->head != NULL; args = args.tail) {
-	    Tr_expty expty = transExp(venv, tenv, args->head);
+	int count;
+	for(count = 0; args && formals; formals = formals->tail, args = args->tail, count++) {
+	    expr = transExp(venv, tenv, args->head);
+
+	    if (0 != cmpTy(formals->head, expr->ty)) {
+		EM_error(e->pos, "function 's args doesn't match at position %d\n", count);
+
+		return Tr_ExpTy(NULL, Ty_Int());
+	    }
 	} 
-	*/
+
+	if (formals || args) {
+	    EM_error(e->pos, "function 's args length doesn't match\n");
+	    return Tr_ExpTy(NULL, Ty_Int());
+	}
+
+	Ty_ty result = x->u.fun.result;
+	return Tr_ExpTy(NULL, result);
 
     } else {
 	EM_error(e->pos, "undefined function %s\n", 
@@ -269,6 +285,19 @@ static Tr_expty transCallExp(S_table venv, S_table tenv, A_exp e)
 static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_recordExp == e->kind);
+
+    E_enventry x = S_look(venv, e->u.record.typ);
+    if (x && E_varEntry == x->kind) {
+
+	A_efieldList field = e->u.record.fields;
+	for (; field; field = field->tail) {
+	}
+
+    } else {
+	EM_error(e->pos, "undefined record %s\n", 
+		 S_name(e->u.call.func));
+	return Tr_ExpTy(NULL, Ty_Int());
+    }
 }
 
 static Tr_expty transSeqExp(S_table venv, S_table tenv, A_exp e)
@@ -349,6 +378,14 @@ static Tr_expty transArrayExp(S_table venv, S_table tenv, A_exp e)
 
     E_enventry x = S_look(tenv, e->u.array.typ);
     if (x && E_varEntry == x->kind) {
+
+	if (Ty_array != x->u.var.ty->kind) {
+	    EM_error(e->pos, "array %s's type is not array\n", 
+		     S_name(e->u.array.typ));
+
+	    return Tr_ExpTy(NULL, Ty_Int());
+	}
+
 	Tr_expty size = transExp(venv, tenv, e->u.array.size);
 	if (Ty_int != size->ty->kind) {
 	    EM_error(e->pos, "array %s's size is not int\n", 
