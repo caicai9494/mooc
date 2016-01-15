@@ -2,6 +2,7 @@
 #include "enventry.h"
 #include "errormsg.h"
 #include "util.h"
+#include "string.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -166,8 +167,10 @@ static Tr_expty transFieldVar(S_table venv, S_table tenv, A_var v)
 {
     assert(A_fieldVar == v->kind);
 
-    /*
-    E_enventry x = S_look(venv, v->u.field.sym);
+    A_var fvar = v->u.field.var;
+    assert(A_simpleVar == fvar->kind);
+    // test record type match or not 
+    E_enventry x = S_look(venv, fvar->u.simple);
     if (x && E_varEntry == x->kind) {
 	Ty_ty typ = x->u.var.ty;
 	assert(Ty_record == typ->kind);
@@ -175,17 +178,19 @@ static Tr_expty transFieldVar(S_table venv, S_table tenv, A_var v)
 	Ty_fieldList field;
 	for (field = typ->u.record; field; field = field -> tail) {
 
-	    if (v->u.field.var == field->head->name) {
-		return Tr_ExpTy(NULL, Ty_Field(field->head->name, field->head->ty));
+	    if (0 == strcmp(S_name(v->u.field.sym), S_name(field->head->name))) {
+		return Tr_ExpTy(NULL, field->head->ty);
 	    }
 	}
-	Tr_expty list = transVar(venv, tenv, v->u.field.var);
+	//not found
+	EM_error(v->pos, "undefined record field %s\n", 
+		 S_name(v->u.field.sym));
+	return Tr_ExpTy(NULL, Ty_Int());
     } else {
 	EM_error(v->pos, "undefined record variable %s\n", 
 		 S_name(v->u.field.sym));
 	return Tr_ExpTy(NULL, Ty_Int());
     }
-    */
 }
 
 static Tr_expty transSubscriptVar(S_table venv, S_table tenv, A_var v)
@@ -286,16 +291,48 @@ static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_recordExp == e->kind);
 
-    E_enventry x = S_look(venv, e->u.record.typ);
+    E_enventry x = S_look(tenv, e->u.record.typ);
     if (x && E_varEntry == x->kind) {
 
-	A_efieldList field = e->u.record.fields;
-	for (; field; field = field->tail) {
+	Ty_ty rtype = x->u.var.ty; 
+
+	if (Ty_record != rtype->kind) {
+	    EM_error(e->pos, "%s not of record type \n", S_name(e->u.record.typ));
+	    return Tr_ExpTy(NULL, Ty_Int());
+	} 
+
+	A_efieldList efield = e->u.record.fields;
+	for (; efield; efield = efield->tail) {
+
+	    // 1. check field exists
+
+	    Ty_fieldList field = NULL;
+	    for (field = rtype->u.record; field; field = field->tail) {
+		if (0 == strcmp(S_name(field->head->name), 
+			        S_name(efield->head->name))) {
+
+		    // 2. exp not match with field type
+		    Tr_expty expty = transExp(venv, tenv, efield->head->exp);
+		    if (0 != cmpTy(field->head->ty, 
+				   expty->ty)) {
+			EM_error(e->pos, "%s field expression not match with record field type\n", S_name(efield->head->name));
+			return Tr_ExpTy(NULL, Ty_Int());
+		    }
+		    break;
+		}
+	    }
+	    if (NULL == field) { // not found
+
+		EM_error(e->pos, "%s field not defined in record type\n", S_name(efield->head->name));
+		return Tr_ExpTy(NULL, Ty_Int());
+	    }
 	}
+
+	return Tr_ExpTy(NULL, Ty_Record(rtype->u.record));
 
     } else {
 	EM_error(e->pos, "undefined record %s\n", 
-		 S_name(e->u.call.func));
+		 S_name(e->u.record.typ));
 	return Tr_ExpTy(NULL, Ty_Int());
     }
 }
@@ -321,21 +358,78 @@ static Tr_expty transSeqExp(S_table venv, S_table tenv, A_exp e)
 static Tr_expty transAssignExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_assignExp == e->kind);
-    return Tr_ExpTy(NULL, Ty_Void());
+    /*
+    Tr_expty lhs = transVar(venv, tenv, e->u.assign.var);
+    Tr_expty rhs = transExp(venv, tenv, e->u.assign.exp);
+    if (0 != cmpTy(lhs->ty, rhs->ty)) {
+	EM_error(e->pos, "assign lhs and rhs type mismatch\n"); 
+
+    } else if (A_simpleVar == e->u.assign.var->kind) {
+    } else if (A_fieldVar == e->u.assign.var->kind) {
+    } else if (A_Var == e->u.assign.var->kind) {
+    }
+    */
+    return Tr_ExpTy(NULL, Ty_Int());
 }
 static Tr_expty transIfExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_ifExp == e->kind);
-    
-    if (NULL == e->u.iff.elsee) {
-	return Tr_ExpTy(NULL, Ty_Void());
-    } else {
+    assert(NULL != e->u.iff.then);
 
+    // check test integer 
+    Tr_expty etest = transExp(venv, tenv, e->u.iff.test);
+    int test_ret = 0;
+    if (Ty_int != etest->ty->kind) {
+
+	EM_error(e->pos, "if stm test is not int\n"); 
+	return Tr_ExpTy(NULL, Ty_Int());
+
+    } else {
+	test_ret = e->u.intt;
+    }
+
+    // if then stm
+    if (NULL == e->u.iff.elsee) {
+	return transExp(venv, tenv, e->u.iff.then); 
+    }
+
+    // if then else stm
+    Tr_expty ethen = transExp(venv, tenv, e->u.iff.then);
+    Tr_expty eelsee = transExp(venv, tenv, e->u.iff.elsee);
+    // test branch
+    if (0 != cmpTy(ethen->ty, eelsee->ty)) {
+	EM_error(e->pos, "if stm branches of different types \n"); 
+	return Tr_ExpTy(NULL, Ty_Int());
+    } else {
+	if (0 == test_ret) {
+	    return eelsee;
+	} else {
+	    return ethen;
+	}
     }
 }
+
 static Tr_expty transWhileExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_whileExp == e->kind);
+
+    // check test integer 
+    Tr_expty etest = transExp(venv, tenv, e->u.whilee.test);
+    int test_ret = 0;
+    if (Ty_int != etest->ty->kind) {
+
+	EM_error(e->pos, "while stm test is not int\n"); 
+	return Tr_ExpTy(NULL, Ty_Int());
+
+    } else {
+	test_ret = e->u.intt;
+    }
+
+    Tr_expty ebody = NULL;
+    while(0 != test_ret) {
+	ebody = transExp(venv, tenv, e->u.whilee.body);
+    }
+    return ebody;
 }
 static Tr_expty transForExp(S_table venv, S_table tenv, A_exp e)
 {
@@ -422,6 +516,13 @@ static void transVarDec(S_table venv, S_table tenv, A_dec d)
     assert(A_varDec == d->kind);
 
     Tr_expty exp = transExp(venv, tenv, d->u.var.init);
+
+    // if type not specified, 
+    // use init's type
+    if (!d->u.var.typ) {
+	S_enter(venv, d->u.var.var, E_VarEntry(exp->ty));
+	return;
+    }
 
     E_enventry x = S_look(tenv, d->u.var.typ);
     if (x && E_varEntry == x->kind) {
