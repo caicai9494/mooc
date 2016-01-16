@@ -12,6 +12,10 @@
 static int cmpTy(Ty_ty lhs, Ty_ty rhs); 
 
 static Ty_ty Ty_actualTy(Ty_ty ty);
+
+static Ty_tyList makeFormalTyList(S_table tenv, A_fieldList paren);
+
+static int loop_depth = 0;
 /* for nametype, find the actual underlying type */
 
 static Tr_expty transSimpleVar(S_table venv, S_table tenv, A_var v);
@@ -413,10 +417,14 @@ static Tr_expty transWhileExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_whileExp == e->kind);
 
+    loop_depth++;
+
     // check test integer 
     Tr_expty etest = transExp(venv, tenv, e->u.whilee.test);
     int test_ret = 0;
     if (Ty_int != etest->ty->kind) {
+
+	loop_depth--;
 
 	EM_error(e->pos, "while stm test is not int\n"); 
 	return Tr_ExpTy(NULL, Ty_Int());
@@ -426,18 +434,43 @@ static Tr_expty transWhileExp(S_table venv, S_table tenv, A_exp e)
     }
 
     Tr_expty ebody = NULL;
-    while(0 != test_ret) {
+    //while(0 != test_ret) {
 	ebody = transExp(venv, tenv, e->u.whilee.body);
-    }
+    //}
+    loop_depth--;
     return ebody;
 }
 static Tr_expty transForExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_forExp == e->kind);
+    Tr_expty elow = transExp(venv, tenv, e->u.forr.lo);
+    if (Ty_int != elow->ty->kind) {
+	EM_error(e->pos, "for stm low is not int\n"); 
+	return Tr_ExpTy(NULL, Ty_Int());
+    }
+
+    Tr_expty ehigh = transExp(venv, tenv, e->u.forr.hi);
+    if (Ty_int != ehigh->ty->kind) {
+	EM_error(e->pos, "for stm high is not int\n"); 
+	return Tr_ExpTy(NULL, Ty_Int());
+    }
+
+    S_beginScope(venv);
+    S_beginScope(tenv);
+
+    // assign the iterator only in the scope of loop
+    S_enter(venv, e->u.forr.var, E_VarEntry(elow->ty));
+
+    S_endScope(venv);
+    S_endScope(tenv);
+    
 }
 static Tr_expty transBreakExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_breakExp == e->kind);
+    if (0 == loop_depth) {
+	EM_error(e->pos, "break stm outside loop\n"); 
+    }
     return Tr_ExpTy(NULL, Ty_Void());
 }
 static Tr_expty transLetExp(S_table venv, S_table tenv, A_exp e)
@@ -454,8 +487,8 @@ static Tr_expty transLetExp(S_table venv, S_table tenv, A_exp e)
     }
     expty = transExp(venv, tenv, e->u.let.body);
 
-    S_beginScope(venv);
-    S_beginScope(tenv);
+    S_endScope(venv);
+    S_endScope(tenv);
     return expty;
 
     /*
@@ -509,6 +542,20 @@ static Tr_expty transArrayExp(S_table venv, S_table tenv, A_exp e)
 static void transFunctionDec(S_table venv, S_table tenv, A_dec d)
 {
     assert(A_functionDec == d->kind);
+
+    A_fundec f = d->u.function->head;
+    Ty_ty resultTy = S_look(tenv, f->result);
+    Ty_tyList formalTys = makeFormalTyList(tenv, f->params);
+    S_enter(venv, f->name, E_FunEntry(formalTys, resultTy));
+    S_beginScope(venv);
+    {
+	A_fieldList l; Ty_tyList t;
+	for(l = f->params, t = formalTys; l; l = l->tail, t = t->tail) {
+	    S_enter(venv, l->head->name, E_VarEntry(t->head));
+	}
+    }
+    transExp(venv, tenv, d->u.function->head->body);
+    S_endScope(venv);
 }
 
 static void transVarDec(S_table venv, S_table tenv, A_dec d)
@@ -620,6 +667,10 @@ static int cmpTy(Ty_ty lhs, Ty_ty rhs)
 	default:
 	    return 0;
     }
+}
+
+static Ty_tyList makeFormalTyList(S_table tenv, A_fieldList paren)
+{
 }
 
 #ifdef TEST
