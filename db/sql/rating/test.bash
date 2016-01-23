@@ -3,6 +3,7 @@
 INIT="rating.sql"
 QUERY="query.sql"
 MODIFY="modify.sql"
+VIEW="view.sql"
 
 if [ ! -e ${INIT} ]; then
     echo "no init file. exiting..."
@@ -19,6 +20,11 @@ if [ ! -e ${MODIFY} ]; then
     exit 1
 fi
 
-sqlite3 -init ${INIT} < ${QUERY}
+if [ ! -e ${VIEW} ]; then
+    echo "no view file. exiting..."
+    exit 1
+fi
+
+sqlite3 -init ${INIT} < ${VIEW}
 
 
