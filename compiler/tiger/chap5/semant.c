@@ -13,7 +13,7 @@ static int cmpTy(Ty_ty lhs, Ty_ty rhs);
 
 static Ty_ty Ty_actualTy(Ty_ty ty);
 
-static Ty_tyList makeFormalTyList(S_table tenv, A_fieldList paren);
+static Ty_tyList makeFormalTyList(S_table tenv, A_fieldList param);
 
 static int loop_depth = 0;
 /* for nametype, find the actual underlying type */
@@ -23,6 +23,7 @@ static Tr_expty transFieldVar(S_table venv, S_table tenv, A_var v);
 static Tr_expty transSubscriptVar(S_table venv, S_table tenv, A_var v);
 
 static Tr_expty transVarExp(S_table venv, S_table tenv, A_exp e);
+
 static Tr_expty transNilExp(S_table venv, S_table tenv, A_exp e);
 static Tr_expty transIntExp(S_table venv, S_table tenv, A_exp e);
 static Tr_expty transStringExp(S_table venv, S_table tenv, A_exp e);
@@ -35,16 +36,18 @@ static Tr_expty transIfExp(S_table venv, S_table tenv, A_exp e);
 static Tr_expty transWhileExp(S_table venv, S_table tenv, A_exp e);
 static Tr_expty transForExp(S_table venv, S_table tenv, A_exp e);
 static Tr_expty transBreakExp(S_table venv, S_table tenv, A_exp e);
-static Tr_expty transLetExp(S_table venv, S_table tenv, A_exp e);
 static Tr_expty transArrayExp(S_table venv, S_table tenv, A_exp e);
-
-static void transFunctionDec(S_table venv, S_table tenv, A_dec d);
-static void transVarDec(S_table venv, S_table tenv, A_dec d);
-static void transTypeDec(S_table venv, S_table tenv, A_dec d); 
+static Tr_expty transLetExp(S_table venv, S_table tenv, A_exp e);
 
 static Ty_ty transNameTy(S_table tenv, A_ty t); 
 static Ty_ty transRecordTy(S_table tenv, A_ty t); 
 static Ty_ty transArrayTy(S_table tenv, A_ty t); 
+
+static void transTypeDec(S_table venv, S_table tenv, A_dec d); 
+
+static void transFunctionDec(S_table venv, S_table tenv, A_dec d);
+static void transVarDec(S_table venv, S_table tenv, A_dec d);
+
 
 /* end static functions declarations */
 
@@ -165,7 +168,6 @@ static Tr_expty transSimpleVar(S_table venv, S_table tenv, A_var v)
 	return Tr_ExpTy(NULL, Ty_Int());
     }
 }
-
 
 static Tr_expty transFieldVar(S_table venv, S_table tenv, A_var v)
 {
@@ -345,36 +347,31 @@ static Tr_expty transSeqExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_seqExp == e->kind);
 
+    A_exp last = NULL;
     A_expList seq = e->u.seq;
-    if (NULL == seq) {
-	return Tr_ExpTy(NULL, Ty_Void());
+    while (seq) {
+	last = seq->head;
+	seq = seq->tail;
     }
-
-    Tr_expty expty = NULL;
-    for (; seq; seq = seq->tail) {
-	expty = transExp(venv, tenv, seq->head);
-	if (NULL == seq->tail) {
-	    return expty;
-	}
-    }	
+    return NULL == last ? 
+	Tr_ExpTy(NULL, Ty_Void()) :
+	transExp(venv, tenv, last);
 }
 
 static Tr_expty transAssignExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_assignExp == e->kind);
-    /*
     Tr_expty lhs = transVar(venv, tenv, e->u.assign.var);
     Tr_expty rhs = transExp(venv, tenv, e->u.assign.exp);
+
     if (0 != cmpTy(lhs->ty, rhs->ty)) {
 	EM_error(e->pos, "assign lhs and rhs type mismatch\n"); 
-
-    } else if (A_simpleVar == e->u.assign.var->kind) {
-    } else if (A_fieldVar == e->u.assign.var->kind) {
-    } else if (A_Var == e->u.assign.var->kind) {
+	return Tr_ExpTy(NULL, Ty_Int());
     }
-    */
-    return Tr_ExpTy(NULL, Ty_Int());
+
+    return Tr_ExpTy(NULL, Ty_Void());
 }
+
 static Tr_expty transIfExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_ifExp == e->kind);
@@ -544,17 +541,38 @@ static void transFunctionDec(S_table venv, S_table tenv, A_dec d)
     assert(A_functionDec == d->kind);
 
     A_fundec f = d->u.function->head;
-    Ty_ty resultTy = S_look(tenv, f->result);
+    Ty_ty ret_type = NULL;
+    // procedure call, no return value (only side effects)
+    if (NULL == f->result) {
+	ret_type = Ty_Void();
+    } else {
+	E_enventry resultTy = S_look(tenv, f->result);
+	if (NULL == resultTy || E_varEntry != resultTy->kind) {
+	    EM_error(d->pos, "function body types undefined %s\n", 
+		     S_name(f->name));
+	    return;
+	} else {
+	    ret_type = resultTy->u.var.ty;
+	}
+    }
     Ty_tyList formalTys = makeFormalTyList(tenv, f->params);
-    S_enter(venv, f->name, E_FunEntry(formalTys, resultTy));
+    // 'formalTys' could be NULL if parameter list is NULL or
+    //  the first parameter is undefined
+    S_enter(venv, f->name, E_FunEntry(formalTys, ret_type));
+
     S_beginScope(venv);
     {
 	A_fieldList l; Ty_tyList t;
-	for(l = f->params, t = formalTys; l; l = l->tail, t = t->tail) {
+	for(l = f->params, t = formalTys; l && t; l = l->tail, t = t->tail) {
 	    S_enter(venv, l->head->name, E_VarEntry(t->head));
 	}
+
+	Tr_expty tr_body = transExp(venv, tenv, d->u.function->head->body);
+	if (0 != cmpTy(tr_body->ty, ret_type)) {
+	    EM_error(d->pos, "function body types mismatch %s\n", 
+		     S_name(f->name));
+	}
     }
-    transExp(venv, tenv, d->u.function->head->body);
     S_endScope(venv);
 }
 
@@ -591,6 +609,8 @@ static void transTypeDec(S_table venv, S_table tenv, A_dec d)
 
     A_nametyList nlist;
     for (nlist = d->u.type; nlist; nlist = nlist->tail) {
+	printf("%dfdf\n", nlist->head->ty->kind);
+	printf("%sfdf\n", S_name(nlist->head->name));
 	S_enter(tenv, nlist->head->name,
 		E_VarEntry(transTy(tenv, nlist->head->ty)));
     }
@@ -618,17 +638,15 @@ static Ty_ty transRecordTy(S_table tenv, A_ty t)
     A_fieldList field;
     Ty_fieldList flist = NULL;
     for (field = t->u.record; field; field = field->tail) {
-	if (field->head->escape) {
 
-	    E_enventry x = S_look(tenv, field->head->typ);
-	    if (x && E_varEntry == x->kind) {
-		flist = Ty_FieldList(Ty_Field(field->head->name, x->u.var.ty), flist);
-	    } else {
-		EM_error(t->pos, "undefined record type %s\n", 
-			 S_name(field->head->typ));
-	    }
-	    
+	E_enventry x = S_look(tenv, field->head->typ);
+	if (x && E_varEntry == x->kind) {
+	    flist = Ty_FieldList(Ty_Field(field->head->name, x->u.var.ty), flist);
+	} else {
+	    EM_error(t->pos, "undefined record type %s\n", 
+		     S_name(field->head->typ));
 	}
+	    
     }
     return Ty_Record(flist);
 }
@@ -669,8 +687,22 @@ static int cmpTy(Ty_ty lhs, Ty_ty rhs)
     }
 }
 
-static Ty_tyList makeFormalTyList(S_table tenv, A_fieldList paren)
+static Ty_tyList makeFormalTyList(S_table tenv, A_fieldList param)
 {
+    Ty_tyList tlist = NULL;
+
+    if (NULL == param) {
+	return NULL;
+    } else {
+	E_enventry x = S_look(tenv, param->head->typ);
+
+	if (x && E_varEntry == x->kind) {
+	    return Ty_TyList(x->u.var.ty, makeFormalTyList(tenv, param->tail));
+	} else {
+	    EM_error(param->head->pos, "undefined function parameter type %s\n", S_name(param->head->typ)); 
+	    return NULL;
+	}
+    }
 }
 
 #ifdef TEST
