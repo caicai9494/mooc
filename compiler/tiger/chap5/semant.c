@@ -296,7 +296,8 @@ static Tr_expty transCallExp(S_table venv, S_table tenv, A_exp e)
 static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_recordExp == e->kind);
-
+ 
+    // TODO: FIX:: record definition can have less fields than the prototype
     E_enventry x = S_look(tenv, e->u.record.typ);
     if (x && E_varEntry == x->kind) {
 
@@ -319,7 +320,8 @@ static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 
 		    // 2. exp not match with field type
 		    Tr_expty expty = transExp(venv, tenv, efield->head->exp);
-		    if (0 != cmpTy(field->head->ty, 
+		    // Nil can match any type in record
+		    if (Ty_nil != expty->ty->kind && 0 != cmpTy(field->head->ty, 
 				   expty->ty)) {
 			EM_error(e->pos, "%s field expression not match with record field type\n", S_name(efield->head->name));
 			return Tr_ExpTy(NULL, Ty_Int());
@@ -540,40 +542,45 @@ static void transFunctionDec(S_table venv, S_table tenv, A_dec d)
 {
     assert(A_functionDec == d->kind);
 
-    A_fundec f = d->u.function->head;
-    Ty_ty ret_type = NULL;
-    // procedure call, no return value (only side effects)
-    if (NULL == f->result) {
-	ret_type = Ty_Void();
-    } else {
-	E_enventry resultTy = S_look(tenv, f->result);
-	if (NULL == resultTy || E_varEntry != resultTy->kind) {
-	    EM_error(d->pos, "function body types undefined %s\n", 
-		     S_name(f->name));
-	    return;
+    A_fundecList fundec_iter;
+    for (fundec_iter = d->u.function; fundec_iter; fundec_iter = fundec_iter->tail) {
+	A_fundec f = fundec_iter->head;
+
+	Ty_ty ret_type = NULL;
+	// procedure call, no return value (only side effects)
+	if (NULL == f->result) {
+	    ret_type = Ty_Void();
 	} else {
-	    ret_type = resultTy->u.var.ty;
+	    E_enventry resultTy = S_look(tenv, f->result);
+	    if (NULL == resultTy || E_varEntry != resultTy->kind) {
+		EM_error(d->pos, "function body types undefined %s\n", 
+			 S_name(f->name));
+		return;
+	    } else {
+		ret_type = resultTy->u.var.ty;
+	    }
 	}
-    }
-    Ty_tyList formalTys = makeFormalTyList(tenv, f->params);
-    // 'formalTys' could be NULL if parameter list is NULL or
-    //  the first parameter is undefined
-    S_enter(venv, f->name, E_FunEntry(formalTys, ret_type));
+	Ty_tyList formalTys = makeFormalTyList(tenv, f->params);
+	// 'formalTys' could be NULL if parameter list is NULL or
+	//  the first parameter is undefined
+	S_enter(venv, f->name, E_FunEntry(formalTys, ret_type));
 
-    S_beginScope(venv);
-    {
-	A_fieldList l; Ty_tyList t;
-	for(l = f->params, t = formalTys; l && t; l = l->tail, t = t->tail) {
-	    S_enter(venv, l->head->name, E_VarEntry(t->head));
-	}
+	S_beginScope(venv);
+	{
+	    A_fieldList l; Ty_tyList t;
+	    for(l = f->params, t = formalTys; l && t; l = l->tail, t = t->tail) {
+		S_enter(venv, l->head->name, E_VarEntry(t->head));
+	    }
 
-	Tr_expty tr_body = transExp(venv, tenv, d->u.function->head->body);
-	if (0 != cmpTy(tr_body->ty, ret_type)) {
-	    EM_error(d->pos, "function body types mismatch %s\n", 
-		     S_name(f->name));
+	    Tr_expty tr_body = transExp(venv, tenv, d->u.function->head->body);
+	    if (0 != cmpTy(tr_body->ty, ret_type)) {
+		EM_error(d->pos, "function body types mismatch %s\n", 
+			 S_name(f->name));
+	    }
 	}
+	S_endScope(venv);
+
     }
-    S_endScope(venv);
 }
 
 static void transVarDec(S_table venv, S_table tenv, A_dec d)
@@ -609,10 +616,15 @@ static void transTypeDec(S_table venv, S_table tenv, A_dec d)
 
     A_nametyList nlist;
     for (nlist = d->u.type; nlist; nlist = nlist->tail) {
-	printf("%dfdf\n", nlist->head->ty->kind);
-	printf("%sfdf\n", S_name(nlist->head->name));
-	S_enter(tenv, nlist->head->name,
-		E_VarEntry(transTy(tenv, nlist->head->ty)));
+	E_enventry temp_entry = E_VarEntry(Ty_Name(nlist->head->name, NULL));
+	S_enter(tenv, nlist->head->name, temp_entry);
+	Ty_ty body_ty = transTy(tenv, nlist->head->ty);
+	temp_entry->u.var.ty = body_ty;
+	
+	//printf("%dfdf\n", nlist->head->ty->kind);
+	//printf("%sfdf\n", S_name(nlist->head->name));
+//	S_enter(tenv, nlist->head->name,
+//		E_VarEntry(transTy(tenv, nlist->head->ty)));
     }
 }
 
