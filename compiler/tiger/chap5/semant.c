@@ -350,14 +350,16 @@ static Tr_expty transSeqExp(S_table venv, S_table tenv, A_exp e)
     assert(A_seqExp == e->kind);
 
     A_exp last = NULL;
+    Tr_expty tr_last = NULL;
+
     A_expList seq = e->u.seq;
     while (seq) {
 	last = seq->head;
+	tr_last = transExp(venv, tenv, last);
 	seq = seq->tail;
     }
     return NULL == last ? 
-	Tr_ExpTy(NULL, Ty_Void()) :
-	transExp(venv, tenv, last);
+	Tr_ExpTy(NULL, Ty_Void()) : tr_last;
 }
 
 static Tr_expty transAssignExp(S_table venv, S_table tenv, A_exp e)
@@ -542,6 +544,8 @@ static void transFunctionDec(S_table venv, S_table tenv, A_dec d)
 {
     assert(A_functionDec == d->kind);
 
+    // first pass
+    // function name, formalParam, return type
     A_fundecList fundec_iter;
     for (fundec_iter = d->u.function; fundec_iter; fundec_iter = fundec_iter->tail) {
 	A_fundec f = fundec_iter->head;
@@ -564,22 +568,30 @@ static void transFunctionDec(S_table venv, S_table tenv, A_dec d)
 	// 'formalTys' could be NULL if parameter list is NULL or
 	//  the first parameter is undefined
 	S_enter(venv, f->name, E_FunEntry(formalTys, ret_type));
+    }
+
+    // second pass
+    // body and function param variables
+    for (fundec_iter = d->u.function; fundec_iter; fundec_iter = fundec_iter->tail) {
+	A_fundec f = fundec_iter->head;
+
+	E_enventry func_dec = S_look(venv, f->name);
+	assert(NULL != func_dec && E_funEntry == func_dec->kind);
 
 	S_beginScope(venv);
 	{
 	    A_fieldList l; Ty_tyList t;
-	    for(l = f->params, t = formalTys; l && t; l = l->tail, t = t->tail) {
+	    for(l = f->params, t = func_dec->u.fun.formals; l && t; l = l->tail, t = t->tail) {
 		S_enter(venv, l->head->name, E_VarEntry(t->head));
 	    }
 
-	    Tr_expty tr_body = transExp(venv, tenv, d->u.function->head->body);
-	    if (0 != cmpTy(tr_body->ty, ret_type)) {
+	    Tr_expty tr_body = transExp(venv, tenv, f->body);
+	    if (0 != cmpTy(tr_body->ty, func_dec->u.fun.result)) {
 		EM_error(d->pos, "function body types mismatch %s\n", 
 			 S_name(f->name));
 	    }
 	}
 	S_endScope(venv);
-
     }
 }
 
@@ -620,11 +632,6 @@ static void transTypeDec(S_table venv, S_table tenv, A_dec d)
 	S_enter(tenv, nlist->head->name, temp_entry);
 	Ty_ty body_ty = transTy(tenv, nlist->head->ty);
 	temp_entry->u.var.ty = body_ty;
-	
-	//printf("%dfdf\n", nlist->head->ty->kind);
-	//printf("%sfdf\n", S_name(nlist->head->name));
-//	S_enter(tenv, nlist->head->name,
-//		E_VarEntry(transTy(tenv, nlist->head->ty)));
     }
 }
 
@@ -647,7 +654,7 @@ static Ty_ty transRecordTy(S_table tenv, A_ty t)
 {
     assert(A_recordTy == t->kind);
 
-    A_fieldList field;
+    A_fieldList field = NULL;
     Ty_fieldList flist = NULL;
     for (field = t->u.record; field; field = field->tail) {
 
