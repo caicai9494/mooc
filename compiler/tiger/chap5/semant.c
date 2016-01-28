@@ -16,6 +16,7 @@ static Ty_ty Ty_actualTy(Ty_ty ty);
 static Ty_tyList makeFormalTyList(S_table tenv, A_fieldList param);
 
 static int loop_depth = 0;
+static int record_depth = 0;
 /* for nametype, find the actual underlying type */
 
 static Tr_expty transSimpleVar(S_table venv, S_table tenv, A_var v);
@@ -219,7 +220,12 @@ static Tr_expty transVarExp(S_table venv, S_table tenv, A_exp e)
 static Tr_expty transNilExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_nilExp == e->kind);
-    return Tr_ExpTy(NULL, Ty_Nil());
+    if (0 == record_depth) {
+	EM_error(e->pos, "nil appears not in record\n");
+	return Tr_ExpTy(NULL, Ty_Int());
+    } else {
+	return Tr_ExpTy(NULL, Ty_Nil());
+    }
 }
 
 static Tr_expty transIntExp(S_table venv, S_table tenv, A_exp e)
@@ -296,6 +302,8 @@ static Tr_expty transCallExp(S_table venv, S_table tenv, A_exp e)
 static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 {
     assert(A_recordExp == e->kind);
+
+    record_depth++;
  
     // TODO: FIX:: record definition can have less fields than the prototype
     E_enventry x = S_look(tenv, e->u.record.typ);
@@ -305,6 +313,7 @@ static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 
 	if (Ty_record != rtype->kind) {
 	    EM_error(e->pos, "%s not of record type \n", S_name(e->u.record.typ));
+	    --record_depth;
 	    return Tr_ExpTy(NULL, Ty_Int());
 	} 
 
@@ -324,6 +333,8 @@ static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 		    if (Ty_nil != expty->ty->kind && 0 != cmpTy(field->head->ty, 
 				   expty->ty)) {
 			EM_error(e->pos, "%s field expression not match with record field type\n", S_name(efield->head->name));
+
+			--record_depth;
 			return Tr_ExpTy(NULL, Ty_Int());
 		    }
 		    break;
@@ -332,15 +343,19 @@ static Tr_expty transRecordExp(S_table venv, S_table tenv, A_exp e)
 	    if (NULL == field) { // not found
 
 		EM_error(e->pos, "%s field not defined in record type\n", S_name(efield->head->name));
+		--record_depth;
 		return Tr_ExpTy(NULL, Ty_Int());
 	    }
 	}
+
+	--record_depth;
 
 	return Tr_ExpTy(NULL, Ty_Record(rtype->u.record));
 
     } else {
 	EM_error(e->pos, "undefined record %s\n", 
 		 S_name(e->u.record.typ));
+	--record_depth;
 	return Tr_ExpTy(NULL, Ty_Int());
     }
 }
